@@ -1,5 +1,6 @@
 import os
 import time
+import threading
 from telegram.ext import Application, MessageHandler, filters, CommandHandler
 
 TOKEN = os.getenv("TOKEN")
@@ -13,8 +14,7 @@ print("✅ Бот готов!")
 RESPONSES = {
     # Основные
     "правила": "📜 С правилами можно ознакомиться [туть](https://telegra.ph/Rules-01-24-146)",
-    "привет": "Привет!",
-    
+
     # Сиси
     "сиси": "Ну, привет... опять ты появляешься. Что на этот раз?",
     "сиси как дела": "Разве важно? Время идет, а я все так же свободна",
@@ -27,11 +27,7 @@ RESPONSES = {
     "создатель": "Луми создал меня, да",
     
     # Дополнительные
-    "бот": "Да, я здесь. Что нужно?",
-    "help": "Пиши 'правила' или напиши что тебе нужно",
-    "помощь": "Пиши 'правила' или напиши что тебе нужно",
-    "спасибо": "Пожалуйста!",
-    "пасиб": "Всегда рад помочь!",
+    "бот": "Ну что тебе надо?"
 }
 
 async def handle_message(update, context):
@@ -93,11 +89,36 @@ async def start(update, context):
         f"Всего команд: {len(RESPONSES)}"
     )
 
+def run_web_server():
+    """Простой веб-сервер для Render (ОБЯЗАТЕЛЬНО!)"""
+    import http.server
+    import socketserver
+    
+    port = int(os.environ.get('PORT', 5000))
+    
+    class HealthHandler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'Bot is running on Render')
+        
+        def log_message(self, format, *args):
+            pass  # Отключаем логи в консоль
+    
+    with socketserver.TCPServer(("0.0.0.0", port), HealthHandler) as httpd:
+        print(f"🌐 Веб-сервер запущен на порту {port}")
+        httpd.serve_forever()
+
 def main():
     """Запуск бота"""
     if not TOKEN:
-        print("❌ Нет токена!")
+        print("❌ Нет токена! Установи TELEGRAM_TOKEN в настройках Render")
         return
+    
+    # Запускаем веб-сервер в отдельном потоке для Render
+    web_thread = threading.Thread(target=run_web_server, daemon=True)
+    web_thread.start()
     
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -105,7 +126,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     print(f"📦 Загружено {len(RESPONSES)} команд")
-    print("🔥 Запускаю бота...")
+    print("🔥 Запускаю бота Telegram...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
