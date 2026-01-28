@@ -18,7 +18,7 @@ KEYWORDS_RESPONSES = {
     "привет": "Привет!",
     "правила": "📜 С правилами можно ознакомиться [туть](https://telegra.ph/Rules-01-24-146)",
     "правило": "📜 С правилами можно ознакомиться [туть](https://telegra.ph/Rules-01-24-146)",
-    "бот": "Я туут"
+    "бот": "Я шлюха"
 }
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -29,15 +29,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         message_text = update.message.text.lower().strip()
         
-        # Проверяем ключевые слова
+        # Проверяем ключевые слова (ТОЧНОЕ совпадение или отдельное слово)
         for keyword, response in KEYWORDS_RESPONSES.items():
-            if keyword in message_text:
+            # Точное совпадение ИЛИ слово отдельно
+            if (keyword == message_text or 
+                f" {keyword} " in f" {message_text} " or
+                message_text.startswith(keyword + " ") or
+                message_text.endswith(" " + keyword)):
+                
                 # Отправляем с кликабельной ссылкой
                 await update.message.reply_text(
                     response, 
                     parse_mode='Markdown',
                     disable_web_page_preview=False
                 )
+                logger.info(f"Ответил на: {keyword}")
                 return
                 
     except Exception as e:
