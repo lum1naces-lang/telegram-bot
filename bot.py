@@ -48,18 +48,7 @@ async def delete_message(update, context):
 
 async def start(update, context):
     """Команда /start"""
-    await update.message.reply_text(
-        "✅ Бот работает!\n\n"
-        "Команды (пиши ОТДЕЛЬНО):\n"
-        "• правила\n"
-        "• привет\n"
-        "• бот\n"
-        "• сиси\n"
-        "• сиси как дела\n"
-        "• луми\n"
-        "• создатель\n\n"
-        "• !дел - удалить сообщение (ответь на сообщение)"
-    )
+    await update.message.reply_text("Работаю")
 
 def main():
     """Запуск бота"""
