@@ -15,10 +15,10 @@ TOKEN = os.getenv("TOKEN")
 
 # Словарь ключевых слов и ответов
 KEYWORDS_RESPONSES = {
-    "привет": "Привет!",
+    "Сиси привет": "Ну, привет... опять ты появляешься. Что на этот раз?",
     "правила": "📜 С правилами можно ознакомиться [туть](https://telegra.ph/Rules-01-24-146)",
     "правило": "📜 С правилами можно ознакомиться [туть](https://telegra.ph/Rules-01-24-146)",
-    "бот": "Я шлюха",
+    "бот": "Я туть",
 }
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -29,9 +29,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         message_text = update.message.text.lower().strip()
         
-        # Проверяем ключевые слова
+        # Проверяем ключевые слова - ТОЛЬКО целые слова!
         for keyword, response in KEYWORDS_RESPONSES.items():
-            if keyword in message_text:
+            # Проверяем что это отдельное слово
+            words = message_text.split()  # Разбиваем на слова
+            if keyword in words:  # Ищем среди отдельных слов
                 # Отправляем с кликабельной ссылкой
                 await update.message.reply_text(
                     response, 
