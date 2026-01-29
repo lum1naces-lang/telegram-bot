@@ -12,7 +12,7 @@ time.sleep(3)
 print("✅ Начинаю работу")
 
 # ⚠️ ЗАМЕНИ НА СВОЙ TELEGRAM ID ⚠️
-ADMIN_IDS = [123456789]  # Твой ID и других админов через запятую
+ADMIN_IDS = [7416252489]  # Твой ID и других админов через запятую
 
 # Хранилище варнов {user_id: {"warns": X, "limit": Y}}
 user_warns = {}
@@ -187,22 +187,9 @@ async def точка_варнлист(update: Update, context: ContextTypes.DEFA
     
     await update.message.reply_text(text)
 
-async def старт_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /старт"""
-    await update.message.reply_text(
-        "✅ Бот работает!\n\n"
-        "Доступные слова:\n"
-        "• правила - ссылка на правила\n"
-        "• сиси - поздороваться с Сиси\n"
-        "• луми - про создателя\n"
-        "• бот - проверить работу\n\n"
-        "Команды с точкой (только для админов):\n"
-        "• .дел - удалить сообщение\n"
-        "• .пинг - проверить пинг\n"
-        "• .варн - выдать варн\n"
-        "• .варнлимит N - изменить лимит\n"
-        "• .варнлист - список варнов"
-    )
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /start"""
+    await update.message.reply_text("Работаю")
 
 def main():
     """Запуск бота"""
@@ -216,23 +203,23 @@ def main():
     
     app = Application.builder().token(TOKEN).build()
     
-    # КОМАНДЫ С ТОЧКОЙ (только для админов)
+    # КОМАНДЫ С ТОЧКОЙ (только для админов) - работают на русском
     app.add_handler(MessageHandler(filters.Regex(r'^\.дел$') & filters.REPLY, точка_дел))
     app.add_handler(MessageHandler(filters.Regex(r'^\.пинг$'), точка_пинг))
     app.add_handler(MessageHandler(filters.Regex(r'^\.варн$') & filters.REPLY, точка_варн))
     app.add_handler(MessageHandler(filters.Regex(r'^\.варнлимит\s+\d+$'), точка_варнлимит))
     app.add_handler(MessageHandler(filters.Regex(r'^\.варнлист$'), точка_варнлист))
     
-    # ОСТАЛЬНЫЕ КОМАНДЫ
-    app.add_handler(CommandHandler("старт", старт_command))
+    # АНГЛИЙСКИЕ КОМАНДЫ (Telegram требует английские для /команд)
+    app.add_handler(CommandHandler("start", start_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     print("🔥 БОТ ЗАПУЩЕН И РАБОТАЕТ!")
-    print("Команды с точкой только для админов!")
+    print("Команды с точкой (.дел .пинг) только для админов!")
+    print("Слэш-команды: /start")
     print("Ожидаю сообщения...")
     
     app.run_polling(drop_pending_updates=True)
 
-# 🔥 ИСПРАВЛЕННАЯ СТРОКА - ДОЛЖНО БЫТЬ ДВОЙНОЕ ПОДЧЕРКИВАНИЕ
 if __name__ == "__main__":
     main()
