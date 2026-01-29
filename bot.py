@@ -37,9 +37,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка сообщений"""
     text = update.message.text.lower().strip()
     
-    # Улучшенная проверка: реагирует если слово есть в сообщении
     for keyword, response in RESPONSES.items():
-        # Для односложных слов проверяем точное вхождение
         if ' ' not in keyword:  # одно слово
             words = text.split()
             if keyword in words:
@@ -59,7 +57,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def точка_дел(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда .дел - удалить сообщение (только для админов)"""
     if not is_admin(update.message.from_user.id):
-        await update.message.delete()  # Удаляем команду неадмина
+        await update.message.delete()
         return
     
     if update.message.reply_to_message:
@@ -77,7 +75,7 @@ async def точка_дел(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def точка_пинг(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда .пинг - проверка пинга (только для админов)"""
     if not is_admin(update.message.from_user.id):
-        await update.message.delete()  # Удаляем команду неадмина
+        await update.message.delete()
         return
     
     start_time = time.time()
@@ -86,27 +84,54 @@ async def точка_пинг(update: Update, context: ContextTypes.DEFAULT_TYPE
     ping_ms = round((end_time - start_time) * 1000, 2)
     await sent_message.edit_text(f"🏓 Пинг бота: {ping_ms}мс")
 
+async def get_user_from_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получает пользователя из сообщения (ответ или упоминание)"""
+    # 1. Если это ответ на сообщение
+    if update.message.reply_to_message:
+        return update.message.reply_to_message.from_user
+    
+    # 2. Если есть упоминание @username
+    if update.message.entities:
+        for entity in update.message.entities:
+            if entity.type == "mention":
+                username = update.message.text[entity.offset+1:entity.offset + entity.length]  # Без @
+                try:
+                    # Пробуем получить пользователя
+                    user = await context.bot.get_chat_member(
+                        chat_id=update.message.chat_id,
+                        user_id=username
+                    )
+                    return user.user
+                except:
+                    # Если не получилось по username, ищем в участниках чата
+                    try:
+                        chat_members = await context.bot.get_chat_administrators(update.message.chat_id)
+                        for member in chat_members:
+                            if member.user.username and member.user.username.lower() == username.lower():
+                                return member.user
+                    except:
+                        pass
+    
+    # 3. Если есть ID пользователя (например: .варн 123456789)
+    text = update.message.text.strip()
+    parts = text.split()
+    if len(parts) > 1:
+        try:
+            user_id = int(parts[1])
+            user = await context.bot.get_chat(user_id)
+            return user
+        except (ValueError, Exception):
+            pass
+    
+    return None
+
 async def точка_варн(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда .варн - выдать предупреждение (только для админов)"""
     if not is_admin(update.message.from_user.id):
-        await update.message.delete()  # Удаляем команду неадмина
+        await update.message.delete()
         return
     
-    target_user = None
-    
-    # 1. Проверяем если это ответ на сообщение
-    if update.message.reply_to_message:
-        target_user = update.message.reply_to_message.from_user
-    
-    # 2. Проверяем если упомянули через @
-    elif update.message.entities:
-        for entity in update.message.entities:
-            if entity.type == "mention":
-                username = update.message.text[entity.offset:entity.offset + entity.length]
-                # Здесь нужно найти пользователя по username
-                # Упрощенная реализация - можно улучшить
-                await update.message.reply_text("⚠️ Укажите пользователя через ответ на сообщение")
-                return
+    target_user = await get_user_from_message(update, context)
     
     if not target_user:
         await update.message.reply_text("❌ Ответьте на сообщение пользователя или укажите @username")
@@ -152,28 +177,17 @@ async def точка_варн(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             # СБРАСЫВАЕМ ВАРНЫ ПОСЛЕ МУТА
             user_warns[user_id]["warns"] = 0
+            print(f"♻️ Сбросил варны для {target_user.first_name} после мута")
         except Exception as e:
             await update.message.reply_text(f"❌ Не смог замутить: {e}")
 
 async def точка_минус_варн(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда -варн - снять предупреждение (только для админов)"""
     if not is_admin(update.message.from_user.id):
-        await update.message.delete()  # Удаляем команду неадмина
+        await update.message.delete()
         return
     
-    target_user = None
-    
-    # 1. Проверяем если это ответ на сообщение
-    if update.message.reply_to_message:
-        target_user = update.message.reply_to_message.from_user
-    
-    # 2. Проверяем если упомянули через @
-    elif update.message.entities:
-        for entity in update.message.entities:
-            if entity.type == "mention":
-                username = update.message.text[entity.offset:entity.offset + entity.length]
-                await update.message.reply_text("⚠️ Укажите пользователя через ответ на сообщение")
-                return
+    target_user = await get_user_from_message(update, context)
     
     if not target_user:
         await update.message.reply_text("❌ Ответьте на сообщение пользователя или укажите @username")
@@ -197,24 +211,11 @@ async def точка_минус_варн(update: Update, context: ContextTypes.D
 
 async def точка_плюс_сс(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда +сс - добавить админа (только для суперадминов)"""
-    # Суперадмин - первый в списке ADMIN_IDS
     if update.message.from_user.id != ADMIN_IDS[0]:
         await update.message.delete()
         return
     
-    target_user = None
-    
-    # 1. Проверяем если это ответ на сообщение
-    if update.message.reply_to_message:
-        target_user = update.message.reply_to_message.from_user
-    
-    # 2. Проверяем если упомянули через @
-    elif update.message.entities:
-        for entity in update.message.entities:
-            if entity.type == "mention":
-                username = update.message.text[entity.offset:entity.offset + entity.length]
-                await update.message.reply_text("⚠️ Укажите пользователя через ответ на сообщение")
-                return
+    target_user = await get_user_from_message(update, context)
     
     if not target_user:
         await update.message.reply_text("❌ Ответьте на сообщение пользователя или укажите @username")
@@ -232,24 +233,11 @@ async def точка_плюс_сс(update: Update, context: ContextTypes.DEFAULT
 
 async def точка_минус_сс(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда -сс - удалить админа (только для суперадминов)"""
-    # Суперадмин - первый в списке ADMIN_IDS
     if update.message.from_user.id != ADMIN_IDS[0]:
         await update.message.delete()
         return
     
-    target_user = None
-    
-    # 1. Проверяем если это ответ на сообщение
-    if update.message.reply_to_message:
-        target_user = update.message.reply_to_message.from_user
-    
-    # 2. Проверяем если упомянули через @
-    elif update.message.entities:
-        for entity in update.message.entities:
-            if entity.type == "mention":
-                username = update.message.text[entity.offset:entity.offset + entity.length]
-                await update.message.reply_text("⚠️ Укажите пользователя через ответ на сообщение")
-                return
+    target_user = await get_user_from_message(update, context)
     
     if not target_user:
         await update.message.reply_text("❌ Ответьте на сообщение пользователя или укажите @username")
@@ -269,13 +257,36 @@ async def точка_минус_сс(update: Update, context: ContextTypes.DEFAU
     else:
         await update.message.reply_text(f"⚠️ {target_user.first_name} не админ!")
 
+async def точка_садм(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда .садм - список админов (только для админов)"""
+    if not is_admin(update.message.from_user.id):
+        await update.message.delete()
+        return
+    
+    if not ADMIN_IDS:
+        await update.message.reply_text("📋 Список админов пуст")
+        return
+    
+    text = "👑 Список админов:\n\n"
+    
+    for idx, admin_id in enumerate(ADMIN_IDS):
+        try:
+            user = await context.bot.get_chat(admin_id)
+            username = f"@{user.username}" if user.username else "нет @"
+            
+            status = "⚡ Суперадмин" if idx == 0 else "👤 Админ"
+            text += f"{status}: {user.first_name} {username} (ID: {admin_id})\n"
+        except Exception as e:
+            text += f"👤 ID {admin_id} (не удалось получить информацию)\n"
+    
+    await update.message.reply_text(text)
+
 async def точка_варнлимит(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда .варнлимит - изменить лимит варнов (только для админов)"""
     if not is_admin(update.message.from_user.id):
-        await update.message.delete()  # Удаляем команду неадмина
+        await update.message.delete()
         return
     
-    # Получаем число после команды
     text = update.message.text.lower().strip()
     parts = text.split()
     
@@ -300,18 +311,18 @@ async def точка_варнлимит(update: Update, context: ContextTypes.DE
 async def точка_варнлист(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда .варнлист - список варнов (только для админов)"""
     if not is_admin(update.message.from_user.id):
-        await update.message.delete()  # Удаляем команду неадмина
+        await update.message.delete()
         return
     
     if not user_warns:
         await update.message.reply_text("📋 Список варнов пуст")
         return
     
-    text = "📋 Список варнов:\n"
+    text = "📋 Список варнов:\n\n"
     for user_id, data in user_warns.items():
         try:
             user = await context.bot.get_chat(user_id)
-            text += f"• {user.first_name}: {data['warns']}/{data['limit']}\n"
+            text += f"• {user.first_name} (@{user.username if user.username else 'нет'}): {data['warns']}/{data['limit']}\n"
         except:
             text += f"• ID {user_id}: {data['warns']}/{data['limit']}\n"
     
@@ -336,14 +347,15 @@ def main():
     # КОМАНДЫ С ТОЧКОЙ (только для админов)
     app.add_handler(MessageHandler(filters.Regex(r'^\.дел$') & filters.REPLY, точка_дел))
     app.add_handler(MessageHandler(filters.Regex(r'^\.пинг$'), точка_пинг))
-    app.add_handler(MessageHandler(filters.Regex(r'^\.варн$') & filters.REPLY, точка_варн))
+    app.add_handler(MessageHandler(filters.Regex(r'^\.варн.*'), точка_варн))  # Изменено для работы с @
     app.add_handler(MessageHandler(filters.Regex(r'^\.варнлимит\s+\d+$'), точка_варнлимит))
     app.add_handler(MessageHandler(filters.Regex(r'^\.варнлист$'), точка_варнлист))
+    app.add_handler(MessageHandler(filters.Regex(r'^\.садм$'), точка_садм))  # Новая команда
     
-    # НОВЫЕ КОМАНДЫ
-    app.add_handler(MessageHandler(filters.Regex(r'^\-варн$') & filters.REPLY, точка_минус_варн))
-    app.add_handler(MessageHandler(filters.Regex(r'^\+сс$') & filters.REPLY, точка_плюс_сс))
-    app.add_handler(MessageHandler(filters.Regex(r'^\-сс$') & filters.REPLY, точка_минус_сс))
+    # КОМАНДЫ С + И - (только для админов)
+    app.add_handler(MessageHandler(filters.Regex(r'^\-варн.*'), точка_минус_варн))
+    app.add_handler(MessageHandler(filters.Regex(r'^\+сс.*'), точка_плюс_сс))
+    app.add_handler(MessageHandler(filters.Regex(r'^\-сс.*'), точка_минус_сс))
     
     # АНГЛИЙСКИЕ КОМАНДЫ
     app.add_handler(CommandHandler("start", start_command))
