@@ -92,12 +92,27 @@ async def точка_варн(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.delete()  # Удаляем команду неадмина
         return
     
-    if not update.message.reply_to_message:
-        await update.message.reply_text("❌ Ответьте на сообщение пользователя!")
+    target_user = None
+    
+    # 1. Проверяем если это ответ на сообщение
+    if update.message.reply_to_message:
+        target_user = update.message.reply_to_message.from_user
+    
+    # 2. Проверяем если упомянули через @
+    elif update.message.entities:
+        for entity in update.message.entities:
+            if entity.type == "mention":
+                username = update.message.text[entity.offset:entity.offset + entity.length]
+                # Здесь нужно найти пользователя по username
+                # Упрощенная реализация - можно улучшить
+                await update.message.reply_text("⚠️ Укажите пользователя через ответ на сообщение")
+                return
+    
+    if not target_user:
+        await update.message.reply_text("❌ Ответьте на сообщение пользователя или укажите @username")
         return
     
-    user = update.message.reply_to_message.from_user
-    user_id = user.id
+    user_id = target_user.id
     
     # Инициализируем если нет
     if user_id not in user_warns:
@@ -108,7 +123,7 @@ async def точка_варн(update: Update, context: ContextTypes.DEFAULT_TYPE
     limit = user_warns[user_id]["limit"]
     
     await update.message.reply_text(
-        f"⚠️ {user.first_name} получил предупреждение!\n"
+        f"⚠️ {target_user.first_name} получил предупреждение!\n"
         f"Варны: {warns}/{limit}"
     )
     
@@ -133,11 +148,126 @@ async def точка_варн(update: Update, context: ContextTypes.DEFAULT_TYPE
                 )
             )
             await update.message.reply_text(
-                f"🚫 {user.first_name} получил мут на 10 часов за {limit} предупреждений!"
+                f"🚫 {target_user.first_name} получил мут на 10 часов за {limit} предупреждений!"
             )
-            user_warns[user_id]["warns"] = 0  # Сброс после мута
+            # СБРАСЫВАЕМ ВАРНЫ ПОСЛЕ МУТА
+            user_warns[user_id]["warns"] = 0
         except Exception as e:
             await update.message.reply_text(f"❌ Не смог замутить: {e}")
+
+async def точка_минус_варн(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда -варн - снять предупреждение (только для админов)"""
+    if not is_admin(update.message.from_user.id):
+        await update.message.delete()  # Удаляем команду неадмина
+        return
+    
+    target_user = None
+    
+    # 1. Проверяем если это ответ на сообщение
+    if update.message.reply_to_message:
+        target_user = update.message.reply_to_message.from_user
+    
+    # 2. Проверяем если упомянули через @
+    elif update.message.entities:
+        for entity in update.message.entities:
+            if entity.type == "mention":
+                username = update.message.text[entity.offset:entity.offset + entity.length]
+                await update.message.reply_text("⚠️ Укажите пользователя через ответ на сообщение")
+                return
+    
+    if not target_user:
+        await update.message.reply_text("❌ Ответьте на сообщение пользователя или укажите @username")
+        return
+    
+    user_id = target_user.id
+    
+    # Проверяем есть ли варны
+    if user_id not in user_warns or user_warns[user_id]["warns"] <= 0:
+        await update.message.reply_text(f"❌ У {target_user.first_name} нет варнов!")
+        return
+    
+    user_warns[user_id]["warns"] -= 1
+    warns = user_warns[user_id]["warns"]
+    limit = user_warns[user_id]["limit"]
+    
+    await update.message.reply_text(
+        f"✅ С {target_user.first_name} снято предупреждение!\n"
+        f"Варны: {warns}/{limit}"
+    )
+
+async def точка_плюс_сс(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда +сс - добавить админа (только для суперадминов)"""
+    # Суперадмин - первый в списке ADMIN_IDS
+    if update.message.from_user.id != ADMIN_IDS[0]:
+        await update.message.delete()
+        return
+    
+    target_user = None
+    
+    # 1. Проверяем если это ответ на сообщение
+    if update.message.reply_to_message:
+        target_user = update.message.reply_to_message.from_user
+    
+    # 2. Проверяем если упомянули через @
+    elif update.message.entities:
+        for entity in update.message.entities:
+            if entity.type == "mention":
+                username = update.message.text[entity.offset:entity.offset + entity.length]
+                await update.message.reply_text("⚠️ Укажите пользователя через ответ на сообщение")
+                return
+    
+    if not target_user:
+        await update.message.reply_text("❌ Ответьте на сообщение пользователя или укажите @username")
+        return
+    
+    user_id = target_user.id
+    
+    # Добавляем в список админов
+    if user_id not in ADMIN_IDS:
+        ADMIN_IDS.append(user_id)
+        await update.message.reply_text(f"✅ {target_user.first_name} добавлен в список админов!")
+        print(f"👑 Новый админ: {target_user.first_name} (ID: {user_id})")
+    else:
+        await update.message.reply_text(f"⚠️ {target_user.first_name} уже админ!")
+
+async def точка_минус_сс(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда -сс - удалить админа (только для суперадминов)"""
+    # Суперадмин - первый в списке ADMIN_IDS
+    if update.message.from_user.id != ADMIN_IDS[0]:
+        await update.message.delete()
+        return
+    
+    target_user = None
+    
+    # 1. Проверяем если это ответ на сообщение
+    if update.message.reply_to_message:
+        target_user = update.message.reply_to_message.from_user
+    
+    # 2. Проверяем если упомянули через @
+    elif update.message.entities:
+        for entity in update.message.entities:
+            if entity.type == "mention":
+                username = update.message.text[entity.offset:entity.offset + entity.length]
+                await update.message.reply_text("⚠️ Укажите пользователя через ответ на сообщение")
+                return
+    
+    if not target_user:
+        await update.message.reply_text("❌ Ответьте на сообщение пользователя или укажите @username")
+        return
+    
+    user_id = target_user.id
+    
+    # Удаляем из списка админов (кроме первого - суперадмина)
+    if user_id == ADMIN_IDS[0]:
+        await update.message.reply_text("❌ Нельзя удалить суперадмина!")
+        return
+    
+    if user_id in ADMIN_IDS:
+        ADMIN_IDS.remove(user_id)
+        await update.message.reply_text(f"✅ {target_user.first_name} удален из списка админов!")
+        print(f"🗑️ Удален админ: {target_user.first_name} (ID: {user_id})")
+    else:
+        await update.message.reply_text(f"⚠️ {target_user.first_name} не админ!")
 
 async def точка_варнлимит(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда .варнлимит - изменить лимит варнов (только для админов)"""
@@ -203,20 +333,24 @@ def main():
     
     app = Application.builder().token(TOKEN).build()
     
-    # КОМАНДЫ С ТОЧКОЙ (только для админов) - работают на русском
+    # КОМАНДЫ С ТОЧКОЙ (только для админов)
     app.add_handler(MessageHandler(filters.Regex(r'^\.дел$') & filters.REPLY, точка_дел))
     app.add_handler(MessageHandler(filters.Regex(r'^\.пинг$'), точка_пинг))
     app.add_handler(MessageHandler(filters.Regex(r'^\.варн$') & filters.REPLY, точка_варн))
     app.add_handler(MessageHandler(filters.Regex(r'^\.варнлимит\s+\d+$'), точка_варнлимит))
     app.add_handler(MessageHandler(filters.Regex(r'^\.варнлист$'), точка_варнлист))
     
-    # АНГЛИЙСКИЕ КОМАНДЫ (Telegram требует английские для /команд)
+    # НОВЫЕ КОМАНДЫ
+    app.add_handler(MessageHandler(filters.Regex(r'^\-варн$') & filters.REPLY, точка_минус_варн))
+    app.add_handler(MessageHandler(filters.Regex(r'^\+сс$') & filters.REPLY, точка_плюс_сс))
+    app.add_handler(MessageHandler(filters.Regex(r'^\-сс$') & filters.REPLY, точка_минус_сс))
+    
+    # АНГЛИЙСКИЕ КОМАНДЫ
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     print("🔥 БОТ ЗАПУЩЕН И РАБОТАЕТ!")
-    print("Команды с точкой (.дел .пинг) только для админов!")
-    print("Слэш-команды: /start")
+    print("Команды с точкой только для админов!")
     print("Ожидаю сообщения...")
     
     app.run_polling(drop_pending_updates=True)
