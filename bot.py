@@ -15,7 +15,6 @@ print("✅ Начинаю работу")
 CREATOR_ID = 7416252489  # Твой ID
 
 # Хранилище рангов: {user_id: "rank"}
-# Ранги: "creator", "head_admin", "admin", "moderator"
 user_ranks = {
     CREATOR_ID: "creator"  # Создатель
 }
@@ -54,7 +53,7 @@ def has_permission(user_id, required_rank):
 
 def is_creator(user_id):
     """Проверяет, является ли пользователь создателем"""
-    return get_rank(user_id) == "creator"
+    return user_id == CREATOR_ID
 
 def is_head_admin_or_higher(user_id):
     """Проверяет, является ли пользователь главным админом или выше"""
@@ -102,23 +101,23 @@ async def get_user_from_message(update: Update, context: ContextTypes.DEFAULT_TY
                 username = update.message.text[entity.offset+1:entity.offset + entity.length]
                 try:
                     # Пробуем найти пользователя по username в чате
-                    chat_members = await context.bot.get_chat_administrators(update.message.chat_id)
+                    members_count = await context.bot.get_chat_member_count(update.message.chat_id)
+                    
+                    # Ищем среди участников чата (упрощенный поиск)
+                    # В реальности нужно кешировать участников или использовать базу данных
+                    chat_members = []
+                    for i in range(0, min(members_count, 100), 100):
+                        try:
+                            members = await context.bot.get_chat_administrators(update.message.chat_id)
+                            chat_members.extend(members)
+                        except:
+                            break
+                    
                     for member in chat_members:
                         if member.user.username and member.user.username.lower() == username.lower():
                             return member.user
-                except:
-                    pass
-    
-    # 3. Если есть ID пользователя
-    text = update.message.text.strip()
-    parts = text.split()
-    if len(parts) > 1:
-        try:
-            user_id = int(parts[1])
-            user = await context.bot.get_chat(user_id)
-            return user
-        except (ValueError, Exception):
-            pass
+                except Exception as e:
+                    print(f"Ошибка поиска пользователя @{username}: {e}")
     
     return None
 
@@ -167,9 +166,15 @@ async def точка_варн(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     
     user_id = target_user.id
+    issuer_id = update.message.from_user.id
     
-    # Нельзя выдавать варны создателю и вышестоящим
-    if has_permission(user_id, get_rank(update.message.from_user.id)):
+    # Нельзя выдавать варны создателю
+    if is_creator(user_id):
+        await update.message.reply_text("❌ Нельзя выдавать варны создателю!")
+        return
+    
+    # Нельзя выдавать варны равным или высшим по рангу
+    if has_permission(user_id, get_rank(issuer_id)):
         await update.message.reply_text("❌ Нельзя выдавать варны пользователям равного или высшего ранга!")
         return
     
@@ -186,7 +191,7 @@ async def точка_варн(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"Варны: {warns}/{limit}"
     )
     
-    # Если достиг лимита
+    # Если достиг лимита - МУТИМ
     if warns >= limit:
         try:
             # Мут на 10 часов
@@ -228,10 +233,17 @@ async def точка_минус_варн(update: Update, context: ContextTypes.D
         return
     
     user_id = target_user.id
+    issuer_id = update.message.from_user.id
     
     # Проверяем есть ли варны
     if user_id not in user_warns or user_warns[user_id]["warns"] <= 0:
         await update.message.reply_text(f"❌ У {target_user.first_name} нет варнов!")
+        return
+    
+    # Нельзя снимать варны, которые выдавал ранг выше
+    # Для простоты: проверяем может ли текущий пользователь выдавать варны этому пользователю
+    if has_permission(user_id, get_rank(issuer_id)):
+        await update.message.reply_text("❌ Нельзя снимать варны у пользователей равного или высшего ранга!")
         return
     
     user_warns[user_id]["warns"] -= 1
